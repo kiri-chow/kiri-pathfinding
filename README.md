@@ -22,6 +22,6 @@ draw_path(path, ax)
 
 ## Example
 
-![example](/home/anthony/.config/Typora/typora-user-images/image-20221021165342297.png)
+![example](example.png)
 
 The image above visualizes the generated map and the found path from point (0, 0) to point (19, 19). The different colors on the map mean different terrains. The green means glass and others mean barriers with additional costs to pass.
