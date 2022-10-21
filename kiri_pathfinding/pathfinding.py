@@ -24,7 +24,7 @@ def draw_path(path, axes=None, color='r'):
     return axes.plot(*zip(*map(lambda x: x[::-1], path)), color=color)
 
 
-def generate_connection(data, dtype="dict", cost_ratios=None):
+def generate_connection(data, cost_ratios=None, index_deltas=None):
     """
     generate a array to describe the moving costs between grids in the map.
 
@@ -37,6 +37,9 @@ def generate_connection(data, dtype="dict", cost_ratios=None):
     cost_ratios : None or list,
         the cost of each type of terrains,
         None means use default values
+    index_deltas : None or list,
+        the deltas of different indices,
+        None means use default values
 
     returns
     -------
@@ -46,8 +49,9 @@ def generate_connection(data, dtype="dict", cost_ratios=None):
     """
     if cost_ratios is None:
         cost_ratios = COST_RATIOS
-    return {"array": _generate_connection_array,
-            "dict": _generate_connection_dict}[dtype](data, cost_ratios)
+    if index_deltas is None:
+        index_deltas = INDEX_DELTAS
+    return _generate_connection_dict(data, cost_ratios, index_deltas)
 
 
 class PathFinding:
@@ -58,7 +62,7 @@ class PathFinding:
     ------
     data_map : np.ndarray(shape=(n, m)),
         the data to describe a map
-    cost_ratios : (movement_ratio, estimated_ratio),
+    balance : (movement_ratio, estimated_ratio),
         ratios of different costs, the default is (1, 1)
 
     kwargs
@@ -67,11 +71,11 @@ class PathFinding:
 
     """
 
-    def __init__(self, data_map, cost_ratios=None, **kwargs):
-        if cost_ratios is None:
-            cost_ratios = (1, 1)
+    def __init__(self, data_map, balance=None, **kwargs):
+        if balance is None:
+            balance = (1, 1)
         self.data_connection = generate_connection(data_map, **kwargs)
-        self.movement_ratio, self.estimated_ratio = cost_ratios
+        self.movement_ratio, self.estimated_ratio = balance
         self.__init_result()
 
     def __get_costs(self, start, stop, target):
@@ -214,28 +218,24 @@ def _rowcol_to_index(row, col, n_col):
     return index
 
 
-def _generate_connection_dict(data, cost_ratios):
+def _generate_connection_dict(data, cost_ratios, index_deltas):
     connection = {}
     for row in range(data.shape[0]):
         for col in range(data.shape[1]):
             indices_to_costs = _generate_indices_to_costs(
-                row, col, cost_ratios[data[row, col]], data.shape
+                row, col, cost_ratios[data[row, col]], data.shape, index_deltas
             )
             connection[row, col] = indices_to_costs
     return connection
 
 
-def _generate_indices_to_costs(row, col, ratio, shape):
+def _generate_indices_to_costs(row, col, ratio, shape, index_deltas):
     indices_to_costs = {}
     if ratio <= 0:
         return indices_to_costs
-    for r_delta, c_delta, cost in [
-        (-1, -1, 14), (-1, 1, 14), (1, 1, 14), (1, -1, 14),
-        (-1, 0, 10), (1, 0, 10), (0, 1, 10), (0, -1, 10),
-    ]:
-        row_ind = row + r_delta
-        col_ind = col + c_delta
-        if not (0 <= row_ind < shape[0] and 0 <= col_ind < shape[1]):
-            continue
-        indices_to_costs[(row_ind, col_ind)] = ratio * cost
+    for cost, indices in index_deltas:
+        for row_ind, col_ind in indices + (row, col):
+            if not (0 <= row_ind < shape[0] and 0 <= col_ind < shape[1]):
+                continue
+            indices_to_costs[(row_ind, col_ind)] = ratio * cost
     return indices_to_costs
