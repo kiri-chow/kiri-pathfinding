@@ -52,11 +52,12 @@ def generate_map(height, width, seed=None):
 
     # connect river
     connector = TerrainConnector(data_map, 2)
-    data_map[connector.connect(3)] = 2
+    data_map[
+        connector.connect(3, connectivity=1)] = 2
 
     # connect road
     connector = TerrainConnector(data_map, 3)
-    data_map[connector.connect(1)] = 3
+    data_map[connector.connect(1, connectivity=1)] = 3
 
     return data_map
 
@@ -124,10 +125,15 @@ class TerrainConnector:
             end = self._connect(max_number, min_distance2, **kwargs)
         return self.mask
 
-    def _connect(self, max_number=None, min_distance2=2, **kwargs):
+    def _connect(self, max_number=None, min_distance2=2, connectivity=2,
+                 **kwargs):
         from kiri_pathfinding.pathfinding import PathFinding
-        pathfinding = PathFinding(self.mask, cost_ratios=(2, 1), **kwargs)
-        img_labeled = label(self.mask, connectivity=2)
+        index_deltas = None
+        if connectivity == 1:
+            index_deltas = [(10, np.array([[-1, 0], [0, -1], [0, 1], [1, 0]]))]
+        pathfinding = PathFinding(
+            self.mask, cost_ratios=(2, 1), index_deltas=index_deltas, **kwargs)
+        img_labeled = label(self.mask, connectivity=connectivity)
         label_ls = np.unique(img_labeled)
         if max_number is not None and label_ls.max() <= max_number:
             return True
