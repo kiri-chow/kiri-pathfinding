@@ -13,7 +13,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 
 # names of terrains
-TERRAINS = ["glass", "mud", "water", "road", ]
+TERRAINS = ["grass", "mud", "water", "road", ]
 # percentages of different terrains
 PERCENTAGES = [70, 20, 8, 2]
 # entering costs of different terrains
