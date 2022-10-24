@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "A toy module to generate a map and find the shortest path from two points on the map"
 authors = ["anthony <mrchowpoor@gmail.com>"]
 license = "MIT"
+repository = "https://github.com/kiri-chow/kiri-pathfinding"
+readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
