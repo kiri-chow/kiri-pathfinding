@@ -1,5 +1,9 @@
 # kiri-pathfinding
 
+![PythonVersion](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10-blue)
+![PyPi](https://img.shields.io/pypi/v/kiri-pathfinding)
+
+
 A toy module to generate a map and find the shortest path from two points on the map
 
 ## Usage
