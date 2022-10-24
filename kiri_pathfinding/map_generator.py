@@ -51,11 +51,12 @@ def generate_map(height, width, seed=None):
         data_map[data_raw > np.percentile(data_raw, prob)] = ind + 1
 
     # connect river
-    connector = TerrainConnector(data_map, 2)
-    data_map[connector.connect(3)] = 2
+    connector = TerrainConnector(data_map, 2, connectivity=1)
+    data_map[
+        connector.connect(3)] = 2
 
     # connect road
-    connector = TerrainConnector(data_map, 3)
+    connector = TerrainConnector(data_map, 3, connectivity=1)
     data_map[connector.connect(1)] = 3
 
     return data_map
@@ -91,11 +92,14 @@ class TerrainConnector:
         data to describe the map
     terrain : int,
         the terrain code to connect
+    connectivity : int,
+        please refer to the arg : connectivity in skimage.measure.label
 
     """
 
-    def __init__(self, data_map, terrain):
+    def __init__(self, data_map, terrain, connectivity=2):
         self.mask = data_map == terrain
+        self.connectivity = connectivity
 
     def connect(self, max_number=1, min_distance2=2, **kwargs):
         """
@@ -124,10 +128,15 @@ class TerrainConnector:
             end = self._connect(max_number, min_distance2, **kwargs)
         return self.mask
 
-    def _connect(self, max_number=None, min_distance2=2, **kwargs):
+    def _connect(self, max_number=None, min_distance2=2,
+                 **kwargs):
         from kiri_pathfinding.pathfinding import PathFinding
-        pathfinding = PathFinding(self.mask, cost_ratios=(2, 1), **kwargs)
-        img_labeled = label(self.mask, connectivity=2)
+        index_deltas = None
+        if self.connectivity == 1:
+            index_deltas = [(10, np.array([[-1, 0], [0, -1], [0, 1], [1, 0]]))]
+        pathfinding = PathFinding(
+            self.mask, cost_ratios=(2, 1), index_deltas=index_deltas, **kwargs)
+        img_labeled = label(self.mask, connectivity=self.connectivity)
         label_ls = np.unique(img_labeled)
         if max_number is not None and label_ls.max() <= max_number:
             return True
