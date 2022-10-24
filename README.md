@@ -28,4 +28,9 @@ draw_path(path, ax)
 
 ![example](example.png)
 
-The image above visualizes the generated map and the found path from point (0, 0) to point (19, 19). The different colors on the map mean different terrains. The green means glass and others mean barriers with additional costs to pass.
+The image above visualizes the generated map and the found path from point (0, 0) to point (19, 19).
+
+Different colors on the map mean different terrains. 
+Specifically, the green is grassland 
+and the gray means roads, providing a lower movement cost. 
+The brown and blue denote mud and river respectively, which are harder to pass.
