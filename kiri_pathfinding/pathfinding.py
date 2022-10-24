@@ -85,6 +85,8 @@ class PathFinding:
 
         """
         m_cost = self._get_movement_cost(start, stop)
+        if not m_cost:
+            return None, None
         e_cost = self._get_estimated_cost(stop, target)
         c_cost = (self.movement_ratio * m_cost +
                   self.estimated_ratio * e_cost)
@@ -160,6 +162,8 @@ class PathFinding:
             if point in self.__closed:
                 continue
             c_cost, m_cost = self.__get_costs(current_point, point, target)
+            if not m_cost:
+                continue
             c_cost += current_m_cost
             m_cost += current_m_cost
             if (point not in self.__opened
@@ -234,8 +238,11 @@ def _generate_indices_to_costs(row, col, ratio, shape, index_deltas):
     if ratio <= 0:
         return indices_to_costs
     for cost, indices in index_deltas:
+        entering_cost = ratio * cost
+        if not entering_cost:
+            continue
         for row_ind, col_ind in indices + (row, col):
             if not (0 <= row_ind < shape[0] and 0 <= col_ind < shape[1]):
                 continue
-            indices_to_costs[(row_ind, col_ind)] = ratio * cost
+            indices_to_costs[(row_ind, col_ind)] = entering_cost
     return indices_to_costs
