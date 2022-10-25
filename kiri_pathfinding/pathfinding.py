@@ -5,16 +5,24 @@ Created on Mon Oct 17 17:25:41 2022
 
 @author: anthony
 """
+from itertools import product
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
 from matplotlib import pyplot as plt
-from scipy.sparse import csr_matrix
+from scipy.ndimage import binary_dilation
 from kiri_pathfinding.map_generator import COST_RATIOS
 
 
 INDEX_DELTAS = [
-    (14, np.array([[-1, -1], [-1, 1], [1, -1], [1, 1]])),
-    (10, np.array([[-1, 0], [0, -1], [0, 1], [1, 0]])),
+    (14, np.array([[-1, -1], [-1, 1], [1, -1], [1, 1]], dtype=int)),
+    (10, np.array([[-1, 0], [0, -1], [0, 1], [1, 0]], dtype=int)),
 ]
+
+ARRAY_CROSS = np.array([
+    [0, 1, 0],
+    [1, 1, 1],
+    [0, 1, 0],
+], dtype=int)
 
 
 def draw_path(path, axes=None, color='r'):
@@ -24,7 +32,9 @@ def draw_path(path, axes=None, color='r'):
     return axes.plot(*zip(*map(lambda x: x[::-1], path)), color=color)
 
 
-def generate_connection(data, cost_ratios=None, index_deltas=None):
+def generate_connection(
+    data, method='array', cost_ratios=None, index_deltas=None, **kwargs
+):
     """
     generate a array to describe the moving costs between grids in the map.
 
@@ -32,14 +42,22 @@ def generate_connection(data, cost_ratios=None, index_deltas=None):
     ------
     data : np.ndarray(dtype=int),
         the data to describe a map
-    dtype : "dict" or "array",
-        the data type of the connection costs
+    method : "dict" or "array",
+        the calculating method of the connection costs
     cost_ratios : None or list,
         the cost of each type of terrains,
         None means use default values
     index_deltas : None or list,
         the deltas of different indices,
         None means use default values
+
+    kwargs
+    ------
+    nebr_test : bool, the default is False.
+        available when arg : method == 'array'.
+        True means to consider the neighbor of slants
+        False means to ignore that.
+        Will run in a longer time.
 
     returns
     -------
@@ -51,7 +69,9 @@ def generate_connection(data, cost_ratios=None, index_deltas=None):
         cost_ratios = COST_RATIOS
     if index_deltas is None:
         index_deltas = INDEX_DELTAS
-    return _generate_connection_dict(data, cost_ratios, index_deltas)
+    return {"dict": _generate_connection_dict,
+            "array": _generate_connection_array,
+            }[method](data, cost_ratios, index_deltas, **kwargs)
 
 
 class PathFinding:
@@ -98,7 +118,7 @@ class PathFinding:
         return cost
 
     def _get_movement_cost(self, start, target):
-        cost = self.data_connection.get(target, {}).get(start)
+        cost = self.data_connection.get(start, {}).get(target)
         return cost
 
     def __init_result(self):
@@ -189,56 +209,31 @@ class PathFinding:
         return path[::-1]
 
 
-def _generate_connection_array(data, cost_ratios):
-    n_row, n_col = data.shape
-    n_indices = n_row * n_col
-    connection = csr_matrix(np.zeros((n_indices, n_indices), dtype=int))
-
-    def _generate_conn(ind):
-        row, col = _index_to_rowcol(ind, n_col)
-        ratio = cost_ratios[data[row, col]]
-        for cost, delta in INDEX_DELTAS:
-            indices = list(
-                filter(lambda x: 0 <= x < n_indices,
-                       map(lambda x: _rowcol_to_index(*x, n_col),
-                           delta + _index_to_rowcol(ind, n_col),
-                           )
-                       )
-            )
-            connection[ind, indices] = ratio * cost
-
-    list(map(_generate_conn, range(n_indices)))
-    return connection
-
-
-def _index_to_rowcol(index, n_col):
-    row = index // n_col
-    col = index % n_col
-    return row, col
-
-
-def _rowcol_to_index(row, col, n_col):
-    index = row * n_col + col
-    return index
-
-
-def _generate_connection_dict(data, cost_ratios, index_deltas):
+def _generate_connection_dict(data_map, cost_ratios, index_deltas):
+    "this method can not consider the neighbor of slants"
     connection = {}
-    for row in range(data.shape[0]):
-        for col in range(data.shape[1]):
-            indices_to_costs = _generate_indices_to_costs(
-                row, col, cost_ratios[data[row, col]], data.shape, index_deltas
+    for row in range(data_map.shape[0]):
+        for col in range(data_map.shape[1]):
+            conn = _get_indices_to_costs(
+                row, col,
+                cost_ratios[data_map[row, col]], data_map.shape, index_deltas
             )
-            connection[row, col] = indices_to_costs
+            for rowcol, cost in conn.items():
+                try:
+                    data = connection[rowcol]
+                except KeyError:
+                    data = {}
+                    connection[rowcol] = data
+                data[row, col] = cost
     return connection
 
 
-def _generate_indices_to_costs(row, col, ratio, shape, index_deltas):
+def _get_indices_to_costs(row, col, ratio, shape, index_deltas):
     indices_to_costs = {}
     if ratio <= 0:
         return indices_to_costs
     for cost, indices in index_deltas:
-        entering_cost = ratio * cost
+        entering_cost = int(ratio * cost)
         if not entering_cost:
             continue
         for row_ind, col_ind in indices + (row, col):
@@ -246,3 +241,68 @@ def _generate_indices_to_costs(row, col, ratio, shape, index_deltas):
                 continue
             indices_to_costs[(row_ind, col_ind)] = entering_cost
     return indices_to_costs
+
+
+def _generate_connection_array(
+        data_map, cost_ratios, index_deltas, nebr_test=False):
+    "this method can consider the neighbor of slants"
+    index_masks = _get_index_masks(index_deltas, nebr_test)
+    data_costs = _get_data_costs(data_map, cost_ratios)
+
+    n_row, n_col = data_map.shape
+    func = _base_get_array_connect
+    if nebr_test:
+        func = _base_get_array_connect_with_nebr
+    connection = dict(
+        map(lambda x: (x, _get_array_connect(x, data_costs[x], index_masks, func)),
+            product(range(n_row), range(n_col))))
+    return connection
+
+
+def _get_data_costs(data_map, cost_ratios):
+    data_base = np.vectorize(lambda x: cost_ratios[x])(data_map)
+    data_base = np.pad(data_base, 1, constant_values=0)
+    n_row, n_col = data_map.shape
+    data_costs = as_strided(
+        data_base, shape=(n_row, n_col, 3, 3),
+        strides=data_base.strides + data_base.strides)
+    return data_costs
+
+
+def _get_index_masks(index_deltas, nebr_test):
+    index_masks = []
+    for delta, indices in index_deltas:
+        for index in indices:
+            index_masks.append((delta, index,
+                                _convert_index_to_mask(index, nebr_test)))
+    return index_masks
+
+
+def _convert_index_to_mask(index, nebr_test):
+    if not nebr_test:
+        return tuple(index + 1)
+    mask = np.zeros((3, 3), dtype=bool)
+    mask[tuple(index + 1)] = 1
+    if np.abs(index).sum() > 1:
+        mask = binary_dilation(mask, ARRAY_CROSS)
+    return mask
+
+
+def _get_array_connect(rowcol, array, index_masks, func):
+    connection = {}
+    for delta, index, mask in index_masks:
+        cost = func(array, mask)
+        if cost > 0:
+            connection[tuple(index + rowcol)] = int(cost * delta)
+    return connection
+
+
+def _base_get_array_connect(array, mask):
+    return array[mask]
+
+
+def _base_get_array_connect_with_nebr(array, mask):
+    data = array[mask]
+    if 0 in data:
+        return 0
+    return max(data)
