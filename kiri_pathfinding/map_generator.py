@@ -7,6 +7,7 @@ Created on Mon Oct 17 16:48:15 2022
 """
 
 import numpy as np
+from scipy.ndimage import convolve
 from skimage.measure import label
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -33,6 +34,8 @@ def generate_map(height, width, seed=None):
     ------
     height, width : int,
         the height and width of the map
+    seed : None or int,
+        the random seed of map generation
 
     returns
     -------
@@ -101,6 +104,26 @@ class TerrainConnector:
         self.mask = data_map == terrain
         self.connectivity = connectivity
 
+    @property
+    def connectivity(self):
+        """
+        the connectivity type,
+        please refer to the arg : connectivity in skimage.measure.label
+
+        """
+        return self.__connectivity
+
+    @connectivity.setter
+    def connectivity(self, value):
+        assert value in {1, 2}
+        self.__node_kernel = {
+            1: np.array([[0, 1, 0],
+                         [1, 1, 1],
+                         [0, 1, 0]], dtype=int),
+            2: np.ones((3, 3), dtype=int),
+        }[value]
+        self.__connectivity = value
+
     def connect(self, max_number=1, min_distance2=2, **kwargs):
         """
         connect by the mask
@@ -151,7 +174,7 @@ class TerrainConnector:
 
     def __connect_lab(self, lab, img_labeled, pathfinding, min_distance2):
         mask = lab == img_labeled
-        nodes = self.__filter_nodes(list(zip(*np.where(mask))))
+        nodes = self.__filter_nodes(mask)
         indices = list(zip(*np.where((~mask) & self.mask)))
         if len(indices) == 0:
             return True
@@ -169,10 +192,7 @@ class TerrainConnector:
         delta2[delta2 <= min_distance2] = delta2.max() + 1
         return indices[np.argmin(delta2)]
 
-    def __filter_nodes(self, indices):
-        return filter(self.__if_node, indices)
-
-    def __if_node(self, coord):
-        row, col = coord
-        data = self.mask[max(0, row - 1): row + 2, max(0, col - 1): col + 2]
-        return data.sum() <= 2
+    def __filter_nodes(self, mask):
+        data = convolve(mask.astype(int), self.__node_kernel)
+        data = (data <= 2) & mask
+        return list(zip(*np.where(data)))
